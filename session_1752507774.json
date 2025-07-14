@@ -1,0 +1,28 @@
+{
+  "timestamp": 1752507774.0649781,
+  "variables": {
+    "user_name": "Friend",
+    "conversation_count": "0",
+    "user_mood": "neutral",
+    "last_topic": "none",
+    "user_preferences": "{}"
+  },
+  "history": [
+    {
+      "timestamp": 1752507742.6871495,
+      "type": "user",
+      "content": "hi"
+    },
+    {
+      "timestamp": 1752507752.570195,
+      "type": "user",
+      "content": "do i like chicken?"
+    },
+    {
+      "timestamp": 1752507766.2767105,
+      "type": "user",
+      "content": "tell_joke"
+    }
+  ],
+  "module": "main"
+}
