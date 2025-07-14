@@ -1,0 +1,73 @@
+{
+  "timestamp": 1752508533.4708962,
+  "variables": {
+    "user_name": "Friend",
+    "conversation_count": "0",
+    "user_mood": "friendly",
+    "last_topic": "greeting",
+    "user_preferences": "{}"
+  },
+  "history": [
+    {
+      "timestamp": 1752508120.5050294,
+      "type": "user",
+      "content": "hi"
+    },
+    {
+      "timestamp": 1752508123.9177992,
+      "type": "user",
+      "content": "help"
+    },
+    {
+      "timestamp": 1752508143.063557,
+      "type": "user",
+      "content": "hi"
+    },
+    {
+      "timestamp": 1752508153.808099,
+      "type": "user",
+      "content": "tem a joke"
+    },
+    {
+      "timestamp": 1752508191.0908003,
+      "type": "user",
+      "content": "hello"
+    },
+    {
+      "timestamp": 1752508207.0788047,
+      "type": "user",
+      "content": "\"hello\""
+    },
+    {
+      "timestamp": 1752508249.9332275,
+      "type": "user",
+      "content": "call greet_user"
+    },
+    {
+      "timestamp": 1752508258.4071832,
+      "type": "user",
+      "content": "You \u2192 debug"
+    },
+    {
+      "timestamp": 1752508261.53272,
+      "type": "user",
+      "content": "debug"
+    },
+    {
+      "timestamp": 1752508266.088693,
+      "type": "user",
+      "content": "flows"
+    },
+    {
+      "timestamp": 1752508273.7295969,
+      "type": "user",
+      "content": "hi"
+    },
+    {
+      "timestamp": 1752508280.8157895,
+      "type": "user",
+      "content": "weather"
+    }
+  ],
+  "module": "main"
+}

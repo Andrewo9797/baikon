@@ -1,0 +1,28 @@
+{
+  "timestamp": 1752509088.9088366,
+  "variables": {
+    "user_name": "Friend",
+    "conversation_count": "0",
+    "user_mood": "neutral",
+    "last_topic": "none",
+    "user_preferences": "{}"
+  },
+  "history": [
+    {
+      "timestamp": 1752508852.1447897,
+      "type": "user",
+      "content": "hello"
+    },
+    {
+      "timestamp": 1752508873.9866853,
+      "type": "user",
+      "content": "hi"
+    },
+    {
+      "timestamp": 1752509087.208538,
+      "type": "user",
+      "content": "hi"
+    }
+  ],
+  "module": "main"
+}

@@ -1,35 +1,21 @@
 """
-Baikon Parser v2.0 - Enhanced DSL with variables, conditions, and integrations
+Baikon Parser - Simple but working version
 """
 
 import re
-import json
-import yaml
-from typing import Dict, List, Any, Optional, Union
-from dataclasses import dataclass, field
+from typing import Dict, List, Any, Optional
+from dataclasses import dataclass
 from enum import Enum
 
 
 class ActionType(Enum):
     SAY = "say"
     SET = "set"
-    GET = "get"
     CALL = "call"
-    API = "api"
-    IF = "if"
-    LOOP = "loop"
-    IMPORT = "import"
-    EMIT = "emit"
-    WAIT = "wait"
 
 
 class TriggerType(Enum):
     USER_SAYS = "user_says"
-    VARIABLE_EQUALS = "variable_equals"
-    API_RESPONSE = "api_response"
-    TIMER = "timer"
-    EVENT = "event"
-    ALWAYS = "always"
 
 
 @dataclass
@@ -37,62 +23,52 @@ class FlowVariable:
     name: str
     value: Any = None
     type: str = "string"
-    persistent: bool = False
 
 
 @dataclass
 class FlowAction:
     type: ActionType
-    params: Dict[str, Any] = field(default_factory=dict)
-    conditions: List[Dict[str, Any]] = field(default_factory=list)
+    params: Dict[str, Any]
 
 
 @dataclass
 class FlowTrigger:
     type: TriggerType
     pattern: str
-    conditions: List[Dict[str, Any]] = field(default_factory=list)
     priority: int = 0
 
 
 @dataclass
 class FlowFunction:
     name: str
-    actions: List[FlowAction] = field(default_factory=list)
-    params: List[str] = field(default_factory=list)
-    returns: Optional[str] = None
-    async_: bool = False
-
-
-@dataclass
-class FlowModule:
-    name: str
-    flows: Dict[str, 'Flow'] = field(default_factory=dict)
-    functions: Dict[str, FlowFunction] = field(default_factory=dict)
-    variables: Dict[str, FlowVariable] = field(default_factory=dict)
-    imports: List[str] = field(default_factory=list)
-    config: Dict[str, Any] = field(default_factory=dict)
+    actions: List[FlowAction]
 
 
 @dataclass
 class Flow:
     name: str
-    triggers: List[FlowTrigger] = field(default_factory=list)
-    actions: List[FlowAction] = field(default_factory=list)
-    middleware: List[str] = field(default_factory=list)
-    timeout: Optional[int] = None
-    retry_count: int = 0
+    triggers: List[FlowTrigger]
+    middleware: List[str] = None
+
+
+@dataclass
+class FlowModule:
+    name: str
+    flows: Dict[str, Flow]
+    functions: Dict[str, FlowFunction]
+    variables: Dict[str, FlowVariable]
+    imports: List[str] = None
+    config: Dict[str, Any] = None
 
 
 class BaikonParser:
     def __init__(self):
-        self.modules = {}
-        self.current_module = None
-        self.line_number = 0
-        self.syntax_version = "2.0"
-        
+        self.flows = {}
+        self.functions = {}
+        self.variables = {}
+    
     def parse_file(self, filepath: str) -> FlowModule:
-        """Parse a .flow file and return structured module"""
+        """Parse a .flow file and return structured data"""
         try:
             with open(filepath, 'r', encoding='utf-8') as f:
                 content = f.read()
@@ -100,468 +76,162 @@ class BaikonParser:
         except FileNotFoundError:
             raise FileNotFoundError(f"Flow file not found: {filepath}")
         except Exception as e:
-            raise Exception(f"Error parsing flow file {filepath} at line {self.line_number}: {str(e)}")
+            raise Exception(f"Error parsing flow file: {str(e)}")
     
     def parse_content(self, content: str, filename: str = "inline") -> FlowModule:
-        """Parse flow content string into structured module"""
-        lines = content.split('\n')
-        self.line_number = 0
+        """Parse flow content string into structured data"""
+        self.flows = {}
+        self.functions = {}
+        self.variables = {}
         
-        # Initialize module
-        module = FlowModule(name=filename)
-        self.current_module = module
+        # Clean up content
+        lines = [line.strip() for line in content.split('\n') if line.strip() and not line.strip().startswith('#')]
         
-        # Parse configuration and imports first
-        self._parse_header(lines, module)
+        current_block = None
+        current_name = None
+        current_content = []
         
-        # Parse main content
-        self._parse_blocks(lines, module)
-        
-        # Validate and resolve references
-        self._validate_module(module)
-        
-        return module
-    
-    def _parse_header(self, lines: List[str], module: FlowModule):
-        """Parse module header (config, imports, variables)"""
-        i = 0
-        while i < len(lines):
-            line = lines[i].strip()
-            self.line_number = i + 1
-            
-            if not line or line.startswith('#'):
-                i += 1
+        for line in lines:
+            # Skip version and config lines for now
+            if line.startswith(('version:', 'config:', 'var ', 'import ')):
                 continue
                 
-            # Parse version
-            if line.startswith('version:'):
-                module.config['version'] = line.split(':', 1)[1].strip()
-                
-            # Parse imports
-            elif line.startswith('import '):
-                imports = line[7:].strip().split(',')
-                module.imports.extend([imp.strip() for imp in imports])
-                
-            # Parse global variables
-            elif line.startswith('var '):
-                var_def = line[4:].strip()
-                self._parse_variable(var_def, module)
-                
-            # Parse configuration
-            elif line.startswith('config:'):
-                i = self._parse_config_block(lines, i + 1, module)
-                continue
-                
-            # Stop at first non-header line
-            elif line.startswith(('flow ', 'function ', 'middleware ')):
-                break
-                
-            i += 1
-    
-    def _parse_blocks(self, lines: List[str], module: FlowModule):
-        """Parse main content blocks"""
-        i = 0
-        while i < len(lines):
-            line = lines[i].strip()
-            self.line_number = i + 1
-            
-            if not line or line.startswith('#'):
-                i += 1
-                continue
-                
-            # Parse flows
             if line.startswith('flow '):
-                flow_name = line[5:].strip(':')
-                flow = Flow(name=flow_name)
-                i = self._parse_flow_block(lines, i + 1, flow)
-                module.flows[flow_name] = flow
+                # Save previous block
+                if current_block and current_name:
+                    self._process_block(current_block, current_name, current_content)
                 
-            # Parse functions
+                # Start new flow block
+                current_block = 'flow'
+                current_name = line[5:].strip(':')
+                current_content = []
+                
             elif line.startswith('function '):
-                func_def = line[9:].strip(':')
-                func = self._parse_function_signature(func_def)
-                i = self._parse_function_block(lines, i + 1, func)
-                module.functions[func.name] = func
+                # Save previous block
+                if current_block and current_name:
+                    self._process_block(current_block, current_name, current_content)
                 
-            # Parse middleware
-            elif line.startswith('middleware '):
-                middleware_name = line[11:].strip(':')
-                middleware = FlowFunction(name=middleware_name)
-                i = self._parse_function_block(lines, i + 1, middleware)
-                module.functions[f"middleware:{middleware_name}"] = middleware
+                # Start new function block
+                current_block = 'function'
+                current_name = line[9:].strip(':')
+                current_content = []
                 
             else:
-                i += 1
-    
-    def _parse_flow_block(self, lines: List[str], start_idx: int, flow: Flow) -> int:
-        """Parse a flow block and return next line index"""
-        i = start_idx
+                # Add to current block
+                if current_block:
+                    current_content.append(line)
         
-        while i < len(lines):
-            line = lines[i].strip()
-            self.line_number = i + 1
-            
-            if not line or line.startswith('#'):
-                i += 1
-                continue
-                
-            # End of block
-            if not line.startswith((' ', '\t')) and line.endswith(':'):
-                break
-                
-            # Parse triggers
-            if line.startswith('when '):
-                trigger = self._parse_trigger(line)
-                flow.triggers.append(trigger)
-                
-            # Parse direct actions
-            elif line.startswith(('say ', 'set ', 'call ', 'api ', 'emit ')):
-                action = self._parse_action(line)
-                flow.actions.append(action)
-                
-            # Parse middleware
-            elif line.startswith('use '):
-                middleware_name = line[4:].strip()
-                flow.middleware.append(middleware_name)
-                
-            # Parse flow config
-            elif line.startswith('timeout:'):
-                flow.timeout = int(line.split(':', 1)[1].strip())
-                
-            elif line.startswith('retry:'):
-                flow.retry_count = int(line.split(':', 1)[1].strip())
-                
-            i += 1
-            
-        return i
-    
-    def _parse_function_block(self, lines: List[str], start_idx: int, func: FlowFunction) -> int:
-        """Parse a function block and return next line index"""
-        i = start_idx
+        # Process final block
+        if current_block and current_name:
+            self._process_block(current_block, current_name, current_content)
         
-        while i < len(lines):
-            line = lines[i].strip()
-            self.line_number = i + 1
-            
-            if not line or line.startswith('#'):
-                i += 1
-                continue
-                
-            # End of block
-            if not line.startswith((' ', '\t')) and line.endswith(':'):
-                break
-                
-            # Parse actions
-            action = self._parse_action(line)
-            if action:
-                func.actions.append(action)
-                
-            i += 1
-            
-        return i
-    
-    def _parse_trigger(self, line: str) -> FlowTrigger:
-        """Parse a trigger line"""
-        # when user says "hello" -> call greet_user
-        # when var user_mood equals "happy" -> call celebrate
-        # when api weather returns -> call process_weather
-        # when timer 5s -> call timeout_handler
-        # when event user_login -> call welcome_user
+        # Set default variables
+        self.variables = {
+            'user_name': FlowVariable('user_name', 'Friend'),
+            'conversation_count': FlowVariable('conversation_count', 0),
+            'user_mood': FlowVariable('user_mood', 'neutral'),
+            'last_topic': FlowVariable('last_topic', 'none'),
+            'user_preferences': FlowVariable('user_preferences', {})
+        }
         
-        patterns = [
-            (r'when user says "([^"]+)"(?:\s+if\s+(.+?))?\s*->\s*call\s+(\w+)', TriggerType.USER_SAYS),
-            (r'when var (\w+) equals "([^"]+)"(?:\s+if\s+(.+?))?\s*->\s*call\s+(\w+)', TriggerType.VARIABLE_EQUALS),
-            (r'when api (\w+) returns(?:\s+if\s+(.+?))?\s*->\s*call\s+(\w+)', TriggerType.API_RESPONSE),
-            (r'when timer (\d+[smh]?)(?:\s+if\s+(.+?))?\s*->\s*call\s+(\w+)', TriggerType.TIMER),
-            (r'when event (\w+)(?:\s+if\s+(.+?))?\s*->\s*call\s+(\w+)', TriggerType.EVENT),
-            (r'when always(?:\s+if\s+(.+?))?\s*->\s*call\s+(\w+)', TriggerType.ALWAYS),
-        ]
-        
-        for pattern, trigger_type in patterns:
-            match = re.match(pattern, line)
-            if match:
-                groups = match.groups()
-                trigger = FlowTrigger(
-                    type=trigger_type,
-                    pattern=groups[0] if groups[0] else "",
-                    conditions=self._parse_conditions(groups[-2] if len(groups) > 2 and groups[-2] else "")
-                )
-                return trigger
-        
-        raise ValueError(f"Invalid trigger syntax: {line}")
-    
-    def _parse_action(self, line: str) -> Optional[FlowAction]:
-        """Parse an action line"""
-        # say "Hello world"
-        # set user_name = "John"
-        # get weather from api
-        # call process_data(user_input)
-        # api get https://api.weather.com/current
-        # if user_mood equals "happy" then say "Great!"
-        # loop 3 times: call send_reminder
-        # emit user_login_event
-        # wait 5s
-        
-        action_patterns = [
-            (r'say "([^"]+)"(?:\s+if\s+(.+))?', ActionType.SAY, lambda m: {"message": m.group(1)}),
-            (r'set (\w+)\s*=\s*"([^"]+)"(?:\s+if\s+(.+))?', ActionType.SET, lambda m: {"variable": m.group(1), "value": m.group(2)}),
-            (r'set (\w+)\s*=\s*(\w+)(?:\s+if\s+(.+))?', ActionType.SET, lambda m: {"variable": m.group(1), "value": m.group(2)}),
-            (r'call (\w+)(?:\(([^)]*)\))?(?:\s+if\s+(.+))?', ActionType.CALL, lambda m: {"function": m.group(1), "params": m.group(2) or ""}),
-            (r'api (get|post|put|delete)\s+([^\s]+)(?:\s+with\s+(.+))?(?:\s+if\s+(.+))?', ActionType.API, 
-             lambda m: {"method": m.group(1), "url": m.group(2), "data": m.group(3) or ""}),
-            (r'emit (\w+)(?:\s+with\s+(.+))?(?:\s+if\s+(.+))?', ActionType.EMIT, lambda m: {"event": m.group(1), "data": m.group(2) or ""}),
-            (r'wait (\d+[smh]?)(?:\s+if\s+(.+))?', ActionType.WAIT, lambda m: {"duration": m.group(1)}),
-            (r'if (.+?) then (.+)', ActionType.IF, lambda m: {"condition": m.group(1), "action": m.group(2)}),
-            (r'loop (\d+) times:\s*(.+)', ActionType.LOOP, lambda m: {"count": int(m.group(1)), "action": m.group(2)}),
-        ]
-        
-        for pattern, action_type, param_func in action_patterns:
-            match = re.match(pattern, line)
-            if match:
-                params = param_func(match)
-                conditions = []
-                
-                # Extract conditions from the last group if present
-                groups = match.groups()
-                if groups and groups[-1]:
-                    conditions = self._parse_conditions(groups[-1])
-                
-                return FlowAction(
-                    type=action_type,
-                    params=params,
-                    conditions=conditions
-                )
-        
-        return None
-    
-    def _parse_conditions(self, condition_str: str) -> List[Dict[str, Any]]:
-        """Parse condition expressions"""
-        if not condition_str:
-            return []
-        
-        # Simple condition parsing - can be enhanced
-        conditions = []
-        for cond in condition_str.split(' and '):
-            cond = cond.strip()
-            if ' equals ' in cond:
-                var, value = cond.split(' equals ', 1)
-                conditions.append({
-                    "type": "equals",
-                    "variable": var.strip(),
-                    "value": value.strip().strip('"')
-                })
-            elif ' contains ' in cond:
-                var, value = cond.split(' contains ', 1)
-                conditions.append({
-                    "type": "contains",
-                    "variable": var.strip(),
-                    "value": value.strip().strip('"')
-                })
-        
-        return conditions
-    
-    def _parse_variable(self, var_def: str, module: FlowModule):
-        """Parse variable definition"""
-        # var user_name: string = "default"
-        # var counter: int = 0
-        # var persistent settings: json = {}
-        
-        parts = var_def.split('=')
-        var_info = parts[0].strip()
-        default_value = parts[1].strip().strip('"') if len(parts) > 1 else None
-        
-        persistent = 'persistent' in var_info
-        if persistent:
-            var_info = var_info.replace('persistent', '').strip()
-        
-        if ':' in var_info:
-            name, var_type = var_info.split(':', 1)
-            name = name.strip()
-            var_type = var_type.strip()
-        else:
-            name = var_info.strip()
-            var_type = "string"
-        
-        module.variables[name] = FlowVariable(
-            name=name,
-            value=default_value,
-            type=var_type,
-            persistent=persistent
+        return FlowModule(
+            name=filename,
+            flows=self.flows,
+            functions=self.functions,
+            variables=self.variables,
+            imports=[],
+            config={}
         )
     
-    def _parse_function_signature(self, func_def: str) -> FlowFunction:
-        """Parse function signature"""
-        # process_data(input: string) -> string
-        # send_email(to: string, subject: string)
-        # async fetch_data() -> json
-        
-        async_ = func_def.startswith('async ')
-        if async_:
-            func_def = func_def[6:]
-        
-        returns = None
-        if ' -> ' in func_def:
-            func_def, returns = func_def.split(' -> ', 1)
-            returns = returns.strip()
-        
-        if '(' in func_def:
-            name = func_def.split('(')[0].strip()
-            params_str = func_def.split('(')[1].split(')')[0]
-            params = [p.strip().split(':')[0] for p in params_str.split(',') if p.strip()]
-        else:
-            name = func_def.strip()
-            params = []
-        
-        return FlowFunction(
-            name=name,
-            params=params,
-            returns=returns,
-            async_=async_
-        )
+    def _process_block(self, block_type: str, name: str, content: List[str]):
+        """Process a parsed block"""
+        if block_type == 'flow':
+            self.flows[name] = self._parse_flow_triggers(content, name)
+        elif block_type == 'function':
+            self.functions[name] = self._parse_function_actions(content, name)
     
-    def _parse_config_block(self, lines: List[str], start_idx: int, module: FlowModule) -> int:
-        """Parse configuration block"""
-        i = start_idx
+    def _parse_flow_triggers(self, content: List[str], flow_name: str) -> Flow:
+        """Parse flow trigger rules"""
+        triggers = []
         
-        while i < len(lines):
-            line = lines[i].strip()
-            self.line_number = i + 1
-            
-            if not line or line.startswith('#'):
-                i += 1
+        for line in content:
+            # Skip middleware lines for now
+            if line.startswith('use '):
                 continue
                 
-            if not line.startswith((' ', '\t')):
-                break
+            # Match pattern: when user says "text" -> call function_name
+            match = re.match(r'when user says "([^"]+)"\s*->\s*call\s+(\w+)', line)
+            if match:
+                trigger_text = match.group(1)
+                function_name = match.group(2)
+                triggers.append(FlowTrigger(
+                    type=TriggerType.USER_SAYS,
+                    pattern=trigger_text
+                ))
+                # Store the function call info
+                if flow_name not in self._trigger_actions:
+                    self._trigger_actions = {}
+                if flow_name not in self._trigger_actions:
+                    self._trigger_actions[flow_name] = {}
+                self._trigger_actions[flow_name][trigger_text] = function_name
+        
+        return Flow(name=flow_name, triggers=triggers, middleware=[])
+    
+    def _parse_function_actions(self, content: List[str], func_name: str) -> FlowFunction:
+        """Parse function action commands"""
+        actions = []
+        
+        for line in content:
+            # Match pattern: say "text"
+            match = re.match(r'say "([^"]+)"', line)
+            if match:
+                message = match.group(1)
+                actions.append(FlowAction(
+                    type=ActionType.SAY,
+                    params={"message": message}
+                ))
             
-            # Parse key-value pairs
-            if ':' in line:
-                key, value = line.split(':', 1)
-                key = key.strip()
-                value = value.strip()
-                
-                # Try to parse as JSON/YAML
-                try:
-                    if value.startswith(('{', '[', '"')):
-                        value = json.loads(value)
-                    elif value.lower() in ('true', 'false'):
-                        value = value.lower() == 'true'
-                    elif value.isdigit():
-                        value = int(value)
-                except:
-                    pass  # Keep as string
-                
-                module.config[key] = value
-            
-            i += 1
+            # Match pattern: set variable = value
+            match = re.match(r'set (\w+)\s*=\s*(.+)', line)
+            if match:
+                var_name = match.group(1)
+                value = match.group(2).strip().strip('"')
+                actions.append(FlowAction(
+                    type=ActionType.SET,
+                    params={"variable": var_name, "value": value}
+                ))
         
-        return i
+        return FlowFunction(name=func_name, actions=actions)
     
-    def _validate_module(self, module: FlowModule):
-        """Validate module structure and references"""
-        errors = []
-        
-        # Check function references
-        for flow in module.flows.values():
-            for trigger in flow.triggers:
-                # Extract function calls from trigger actions
-                pass  # TODO: Implement validation
-        
-        # Check variable references
-        # Check import validity
-        # Check syntax consistency
-        
-        if errors:
-            raise ValueError(f"Module validation errors: {errors}")
+    # Store trigger->function mapping
+    _trigger_actions = {}
     
-    def export_to_json(self, module: FlowModule) -> str:
-        """Export module to JSON format"""
-        def serialize_obj(obj):
-            if hasattr(obj, '__dict__'):
-                return {k: serialize_obj(v) for k, v in obj.__dict__.items()}
-            elif isinstance(obj, list):
-                return [serialize_obj(item) for item in obj]
-            elif isinstance(obj, dict):
-                return {k: serialize_obj(v) for k, v in obj.items()}
-            elif isinstance(obj, Enum):
-                return obj.value
-            else:
-                return obj
-        
-        return json.dumps(serialize_obj(module), indent=2)
-    
-    def export_to_yaml(self, module: FlowModule) -> str:
-        """Export module to YAML format"""
-        data = json.loads(self.export_to_json(module))
-        return yaml.dump(data, default_flow_style=False)
+    def get_function_for_trigger(self, flow_name: str, trigger_pattern: str) -> Optional[str]:
+        """Get function name for a trigger pattern"""
+        return self._trigger_actions.get(flow_name, {}).get(trigger_pattern)
 
 
 def main():
-    """Test the enhanced parser"""
+    """Test the parser"""
     parser = BaikonParser()
     
-    # Test with enhanced syntax
     sample_content = """
-version: 2.0
-import auth, database, weather_api
-
-var user_name: string = "Guest"
-var login_count: int = 0
-var persistent user_preferences: json = {}
-
-config:
-    timeout: 30
-    retry_attempts: 3
-    log_level: "info"
-
-middleware auth_check:
-    if user_name equals "Guest" then call require_login
-
 flow assistant:
-    use auth_check
     when user says "hello" -> call greet_user
-    when user says "weather" -> call get_weather
-    when var user_mood equals "sad" -> call cheer_up
-    when timer 5m -> call check_reminders
-    timeout: 60
-
-flow admin:
-    when user says "status" if user_role equals "admin" -> call show_status
-    when event system_alert -> call handle_alert
+    when user says "help" -> call show_help
 
 function greet_user:
-    set login_count = login_count + 1
-    say "Hello {user_name}! You've logged in {login_count} times."
-    emit user_greeted with user_name
+    say "Hi there! I'm your assistant."
 
-async function get_weather:
-    api get https://api.weather.com/current
-    if api_response contains "rain" then say "Don't forget your umbrella!"
-    wait 2s
-    say "Weather updated!"
-
-function cheer_up:
-    say "I hope your day gets better!"
-    set user_mood = "neutral"
-
-function check_reminders:
-    loop 3 times: call send_reminder
-    emit reminders_sent
+function show_help:
+    say "I can help you with various tasks."
 """
     
     try:
-        module = parser.parse_content(sample_content)
-        print("✅ Enhanced Baikon parsed successfully!")
-        print(f"📊 Module: {module.name}")
-        print(f"   Flows: {len(module.flows)}")
-        print(f"   Functions: {len(module.functions)}")
-        print(f"   Variables: {len(module.variables)}")
-        print(f"   Imports: {len(module.imports)}")
-        
-        # Export examples
-        print("\n📄 JSON Export:")
-        print(parser.export_to_json(module)[:500] + "...")
-        
+        result = parser.parse_content(sample_content)
+        print("✅ Parser working!")
+        print(f"Flows: {list(result.flows.keys())}")
+        print(f"Functions: {list(result.functions.keys())}")
     except Exception as e:
         print(f"❌ Error: {e}")
 
