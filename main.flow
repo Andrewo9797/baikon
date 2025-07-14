@@ -1,0 +1,125 @@
+version: 2.0
+
+# Baikon v2.0 Enhanced Demo
+# Showcasing advanced features: variables, conditions, patterns, and more!
+
+# Global variables
+var user_name: string = "Friend"
+var conversation_count: int = 0
+var user_mood: string = "neutral"
+var last_topic: string = "none"
+var persistent user_preferences: json = {}
+
+# Configuration
+config:
+    timeout: 30
+    log_level: "info"
+    max_retries: 3
+
+# Main conversation flow with enhanced patterns
+flow assistant:
+    use logging
+    when user says "hello" -> call greet_user
+    when user says "hi" -> call greet_user
+    when user says "/help/" -> call show_help
+    when user says "*weather*" -> call get_weather
+    when user says "*joke*" -> call tell_joke
+    when user says "bye" -> call goodbye
+    when user says "*thank*" -> call thank_response
+    when user says "*mood*" -> call check_mood
+    when user says "*name*" -> call handle_name
+    when var user_mood equals "happy" -> call celebrate
+    timeout: 60
+
+# Admin flow with conditions
+flow admin:
+    when user says "status" if user_name equals "Admin" -> call show_status
+    when user says "reset" if user_name equals "Admin" -> call reset_data
+    when user says "debug" if user_name equals "Admin" -> call toggle_debug
+
+# Enhanced functions with variables and conditions
+function greet_user:
+    set conversation_count = conversation_count + 1
+    say "Hello {user_name}! This is our conversation #{conversation_count}."
+    if conversation_count equals "1" then say "Nice to meet you for the first time!"
+    if conversation_count equals "5" then say "Wow, we're really getting to know each other!"
+    set user_mood = "friendly"
+    set last_topic = "greeting"
+    emit user_greeted with user_name
+
+function show_help:
+    say "🤖 Baikon v2.0 Assistant - Here's what I can do:"
+    say "• Greetings: hello, hi"
+    say "• Weather: ask about weather"
+    say "• Entertainment: ask for a joke"
+    say "• Mood tracking: mention your mood"
+    say "• Name handling: tell me your name"
+    say "• Variables: I remember our conversations!"
+    say "• Patterns: I understand partial matches (use * for wildcards)"
+    say "• Admin commands: status, reset, debug (for admins)"
+    set last_topic = "help"
+
+function get_weather:
+    say "🌤️ Today looks sunny with a chance of productivity!"
+    say "Perfect weather for building amazing Baikon applications!"
+    if user_mood equals "sad" then say "But don't worry, sunshine always helps improve the mood!"
+    set last_topic = "weather"
+
+function tell_joke:
+    say "Why don't programmers like nature?"
+    wait 2s
+    say "It has too many bugs! 🐛😄"
+    set user_mood = "amused"
+    set last_topic = "joke"
+    emit joke_told
+
+function goodbye:
+    say "Goodbye {user_name}! Thanks for {conversation_count} wonderful conversations!"
+    if last_topic equals "joke" then say "Hope I left you smiling! 😊"
+    say "Come back soon to explore more Baikon features! 👋"
+    emit user_goodbye
+
+function thank_response:
+    say "You're very welcome, {user_name}!"
+    if user_mood equals "happy" then say "I love helping when you're in such a great mood!"
+    say "I'm always here to help you explore Baikon's capabilities!"
+
+function check_mood:
+    if user_mood equals "happy" then say "I can sense you're feeling great today! 🎉"
+    if user_mood equals "sad" then say "I hope I can help brighten your day! ☀️"
+    if user_mood equals "neutral" then say "How are you feeling today? I'd love to know!"
+    say "Your current mood is: {user_mood}"
+    say "Pro tip: Your mood affects how I respond to you!"
+
+function handle_name:
+    say "Names are special! If you tell me your name, I'll remember it."
+    if user_name equals "Friend" then say "Right now I'm calling you '{user_name}' - feel free to introduce yourself!"
+    if user_name equals "Admin" then say "Welcome back, {user_name}! You have special privileges."
+    say "Try saying: 'My name is [YourName]' or 'Call me [Name]'"
+
+function celebrate:
+    say "🎉 I love seeing you happy, {user_name}!"
+    say "Your positive energy makes our conversations so much better!"
+    if conversation_count equals "3" then say "And we're building such a great conversation history!"
+
+# Admin functions
+function show_status:
+    say "📊 Baikon System Status:"
+    say "• User: {user_name}"
+    say "• Conversations: {conversation_count}"
+    say "• Current mood: {user_mood}"
+    say "• Last topic: {last_topic}"
+    say "• Baikon version: 2.0"
+    say "• Features: Variables ✓, Conditions ✓, Patterns ✓, Events ✓"
+
+function reset_data:
+    set conversation_count = 0
+    set user_mood = "neutral"
+    set last_topic = "none"
+    set user_name = "Friend"
+    say "🔄 All data has been reset to defaults!"
+    say "Ready for a fresh start!"
+
+function toggle_debug:
+    say "🔧 Debug mode toggling is handled by the CLI."
+    say "Use the 'debug' command in the CLI to toggle debug mode."

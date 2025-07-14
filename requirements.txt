@@ -1,0 +1,19 @@
+# Baikon v2.0 Requirements
+# Enhanced with async support and external integrations
+
+# Core dependencies
+requests>=2.31.0          # For API calls
+pyyaml>=6.0              # For YAML export/import
+aiohttp>=3.8.0           # For async HTTP requests (optional)
+
+# Optional development dependencies:
+pytest>=7.0.0            # For testing
+pytest-asyncio>=0.21.0   # For async testing
+black>=22.0.0            # For code formatting
+flake8>=4.0.0            # For linting
+mypy>=1.0.0              # For type checking
+
+# Optional production dependencies:
+redis>=4.5.0             # For persistent variable storage
+sqlite3                  # For session storage (built-in)
+jsonschema>=4.0.0        # For flow validation

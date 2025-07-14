@@ -1,0 +1,217 @@
+version: 2.0
+
+# Advanced E-commerce Bot Example
+# Demonstrates real-world usage with API integrations, complex logic, and state management
+
+import auth, database, payment_api, inventory_api, email_service
+
+# Persistent user state
+var persistent user_id: string = ""
+var persistent cart_items: json = []
+var persistent user_preferences: json = {}
+var session_id: string = ""
+var current_step: string = "browsing"
+var last_product_viewed: string = ""
+
+# Configuration
+config:
+    timeout: 120
+    max_cart_items: 10
+    api_timeout: 15
+    retry_attempts: 3
+    currency: "USD"
+
+# Authentication middleware
+middleware require_auth:
+    if user_id equals "" then call prompt_login
+    if user_id equals "" then say "Please log in to continue"
+
+# Main shopping flow
+flow shopping:
+    use rate_limit, logging
+    when user says "*browse*" -> call show_categories
+    when user says "*search*" -> call handle_search
+    when user says "*cart*" -> call show_cart
+    when user says "*checkout*" -> call start_checkout
+    when user says "*help*" -> call shopping_help
+    when user says "*product*" -> call show_product_details
+    when user says "*add to cart*" -> call add_to_cart
+    when user says "*remove*" -> call remove_from_cart
+    timeout: 300
+
+# Authenticated user flow
+flow account:
+    use require_auth
+    when user says "*orders*" -> call show_order_history
+    when user says "*profile*" -> call show_profile
+    when user says "*preferences*" -> call manage_preferences
+    when user says "*logout*" -> call handle_logout
+
+# Admin flow
+flow admin:
+    when user says "*inventory*" if user_role equals "admin" -> call manage_inventory
+    when user says "*analytics*" if user_role equals "admin" -> call show_analytics
+    when user says "*users*" if user_role equals "admin" -> call manage_users
+
+# Customer service flow
+flow support:
+    when user says "*return*" -> call handle_return
+    when user says "*refund*" -> call handle_refund
+    when user says "*complaint*" -> call handle_complaint
+    when user says "*track*" -> call track_order
+
+# Event-driven flows
+flow notifications:
+    when event cart_abandoned -> call send_cart_reminder
+    when event order_shipped -> call send_shipping_notification
+    when event low_stock -> call notify_restock
+    when timer 24h -> call cleanup_abandoned_carts
+
+# Core shopping functions
+function show_categories:
+    say "🛍️ Browse our categories:"
+    api get https://api.store.com/categories
+    if api_response contains "error" then call handle_api_error
+    loop 5 times: say "• Category {loop_index}"
+    set current_step = "browsing"
+
+async function handle_search:
+    say "🔍 What would you like to search for?"
+    # Wait for next user input (would need additional flow logic)
+    set current_step = "searching"
+
+function show_cart:
+    if cart_items equals "[]" then say "Your cart is empty! 🛒"
+    if cart_items equals "[]" then call suggest_products
+    say "🛒 Your cart contains {cart_items.length} items"
+    # Display cart items logic would go here
+    set current_step = "cart_review"
+
+async function start_checkout:
+    use require_auth
+    if cart_items equals "[]" then say "Add some items to your cart first!"
+    if cart_items equals "[]" then call show_categories
+    
+    say "🏪 Starting checkout process..."
+    set current_step = "checkout"
+    
+    # Calculate total
+    api post https://api.store.com/calculate-total with cart_items
+    wait 2s
+    
+    if api_response contains "total" then say "Total: ${api_response.total}"
+    call collect_shipping_info
+
+function add_to_cart:
+    if cart_items.length equals "10" then say "Cart is full! Maximum 10 items allowed."
+    if last_product_viewed equals "" then say "Please select a product first"
+    
+    # Add product to cart
+    set cart_items = cart_items + [last_product_viewed]
+    say "✅ Added {last_product_viewed} to your cart!"
+    emit product_added_to_cart with last_product_viewed
+
+function shopping_help:
+    say "🛍️ Shopping Assistant Help:"
+    say "• Browse categories: 'browse' or 'show categories'"
+    say "• Search products: 'search for [item]'"
+    say "• View cart: 'show cart' or 'cart'"
+    say "• Add to cart: 'add [product] to cart'"
+    say "• Checkout: 'checkout' or 'buy now'"
+    say "• Account: 'my orders', 'profile', 'preferences'"
+    say "• Support: 'return item', 'track order', 'refund'"
+
+# Authentication functions
+function prompt_login:
+    say "👋 Welcome! Please log in to continue shopping."
+    say "Say 'login with email' or 'create account' to get started."
+
+async function handle_logout:
+    say "👋 Logging you out..."
+    set user_id = ""
+    set cart_items = []
+    set current_step = "browsing"
+    emit user_logout
+    say "You've been logged out successfully!"
+
+# Account management
+async function show_order_history:
+    say "📦 Fetching your order history..."
+    api get https://api.store.com/users/{user_id}/orders
+    wait 3s
+    
+    if api_response contains "orders" then say "You have {api_response.orders.length} orders"
+    if api_response contains "error" then say "Unable to fetch orders right now"
+
+function show_profile:
+    say "👤 Your Profile:"
+    say "• User ID: {user_id}"
+    say "• Preferences: {user_preferences}"
+    say "• Current session: {session_id}"
+    say "Say 'edit profile' to make changes"
+
+# Advanced features
+async function collect_shipping_info:
+    say "📦 We need your shipping information:"
+    say "Please provide your address, or say 'use saved address'"
+    set current_step = "shipping_info"
+
+async function process_payment:
+    say "💳 Processing payment..."
+    api post https://api.payment.com/charge with {amount: api_response.total, user: user_id}
+    wait 5s
+    
+    if api_response contains "success" then call payment_success
+    if api_response contains "error" then call payment_failed
+
+function payment_success:
+    say "🎉 Payment successful! Order confirmed."
+    say "You'll receive a confirmation email shortly."
+    set cart_items = []
+    set current_step = "order_complete"
+    emit order_completed with user_id
+
+function payment_failed:
+    say "❌ Payment failed. Please try a different payment method."
+    say "Your cart items are saved for when you're ready."
+    set current_step = "payment_retry"
+
+# Event handlers
+async function send_cart_reminder:
+    if cart_items.length equals "0" then return
+    
+    say "🛒 You have items waiting in your cart!"
+    say "Complete your purchase to secure these items."
+    api post https://api.email.com/send-reminder with {user: user_id, cart: cart_items}
+
+function cleanup_abandoned_carts:
+    if current_step equals "browsing" then set cart_items = []
+    emit cart_cleanup_completed
+
+# Error handling
+function handle_api_error:
+    say "🔧 We're experiencing technical difficulties."
+    say "Please try again in a moment, or contact support if the problem persists."
+
+# Admin functions
+async function manage_inventory:
+    say "📊 Admin Inventory Management"
+    api get https://api.store.com/admin/inventory
+    say "Current inventory levels retrieved"
+
+function show_analytics:
+    say "📈 Store Analytics Dashboard"
+    say "• Total users: Loading..."
+    say "• Sales today: Loading..."
+    say "• Popular products: Loading..."
+
+# Support functions
+function handle_return:
+    say "📤 Return Process"
+    say "Please provide your order number to start a return."
+    set current_step = "return_request"
+
+function track_order:
+    say "📍 Order Tracking"
+    say "Please provide your order number to track your package."
+    api get https://api.shipping.com/track/{order_id}
